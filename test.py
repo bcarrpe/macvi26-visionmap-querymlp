@@ -5,7 +5,7 @@ import time
 import math
 import sys
 from tqdm import tqdm
-import torchmetrics
+from torchmetrics.detection.mean_ap import MeanAveragePrecision
 from pprint import pprint
 import numpy as np
 
@@ -155,7 +155,7 @@ def save_F1_over_dist(metrics, test_dir):
 @torch.no_grad()
 def test(model, data_loader, device, logger=None):
     model.eval()
-    ap_metric=torchmetrics.detection.MeanAveragePrecision(box_format="cxcywh", iou_type='bbox')
+    ap_metric=MeanAveragePrecision(box_format="cxcywh", iou_type='bbox')
 
     metrics_dict = defaultdict(float)
     metrics_dict_distance = {}
@@ -205,7 +205,7 @@ def test(model, data_loader, device, logger=None):
 ###########
 
 # general
-path_to_weights = r"training_results/run_MLP10_newMet/best.pth" 
+path_to_weights = r"transformer-aton-train-120/best.pth" 
 output_dir = "test_results"
 
 # Transformer
@@ -224,7 +224,7 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # Dataset
 # path_to_dataset = "/home/marten/Uni/Semester_4/src/Trainingdata/Generated_Sets/Transformer_Dataset2/dataset.yaml"
-path_to_dataset = "/home/marten/Uni/Semester_4/src/TestData/TestLabeled/Generated_Sets/Transformer/dataset.yaml"
+path_to_dataset = "dataset.yaml"
 
 # Loss
 aux_loss = False
@@ -235,7 +235,7 @@ weight_decay=1e-3
 epochs=120
 lr_drop=65
 clip_max_norm=0.0
-num_workers = 4
+num_workers = 0
 
 
 # Init Model
