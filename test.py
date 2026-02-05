@@ -95,12 +95,14 @@ def compute_metrics(outputs, labels, queries_mask, labels_mask, results_dict, io
     results_dict['tp_match'] += bb_filtered.size(0)
 
 def print_metrics(metrics):
-    metrics["Precision"] = metrics["tp"] / (metrics["tp"]+ metrics["fp"])
-    metrics["Recall"] = metrics["tp"] / (metrics["tp"]+ metrics["fn"])
-    metrics["F1-Score"] = 2 * metrics["Precision"] * metrics["Recall"] / (metrics["Recall"]+ metrics["Precision"])
-    metrics["Mean-IoU"] = metrics["IoU"] / metrics["tp_match"]
+    metrics["precision"] = metrics["tp"] / (metrics["tp"]+ metrics["fp"])
+    metrics["recall"] = metrics["tp"] / (metrics["tp"]+ metrics["fn"])
+    metrics["f1"] = 2 * metrics["Precision"] * metrics["Recall"] / (metrics["Recall"]+ metrics["Precision"])
+    metrics["mean-IoU"] = metrics["IoU"] / metrics["tp_match"]
     for k,v in metrics.items():
         print(f"{k}:".ljust(6), v)
+    with open("results.json", "w") as f:
+        json.dump(metrics, f)
 
 def print_latency(latency):
     latency = latency["time"] / latency["count"]
