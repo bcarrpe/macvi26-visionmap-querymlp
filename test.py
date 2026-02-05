@@ -95,10 +95,10 @@ def compute_metrics(outputs, labels, queries_mask, labels_mask, results_dict, io
     results_dict['tp_match'] += bb_filtered.size(0)
 
 def print_metrics(metrics):
-    metrics["precision"] = metrics["tp"] / (metrics["tp"]+ metrics["fp"])
-    metrics["recall"] = metrics["tp"] / (metrics["tp"]+ metrics["fn"])
-    metrics["f1"] = 2 * metrics["Precision"] * metrics["Recall"] / (metrics["Recall"]+ metrics["Precision"])
-    metrics["mean-IoU"] = metrics["IoU"] / metrics["tp_match"]
+    metrics["precision"] = metrics["tp"] / (metrics["tp"]+ metrics["fp"]) if (metrics["tp"]+ metrics["fp"]) > 0 else 0
+    metrics["recall"] = metrics["tp"] / (metrics["tp"]+ metrics["fn"]) if (metrics["tp"]+ metrics["fn"]) > 0 else 0
+    metrics["f1"] = 2 * metrics["Precision"] * metrics["Recall"] / (metrics["Recall"]+ metrics["Precision"]) if (metrics["Recall"]+ metrics["Precision"]) > 0 else 0
+    metrics["mean-IoU"] = metrics["IoU"] / metrics["tp_match"] if metrics["tp_match"] > 0 else 0
     for k,v in metrics.items():
         print(f"{k}:".ljust(6), v)
     with open("results.json", "w") as f:
