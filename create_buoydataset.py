@@ -1,4 +1,4 @@
-"""Script to create Dataset in Yolo Format for Transformer (including images, buoyGT data, and BB Labels)
+"""Script to create Dataset in Yolo Format for Transformer (including images, buoyGT data, BB Labels, and raw IMU data)
 Modified to automatically split data into train/val/test sets from all available data"""
 
 import os
@@ -42,7 +42,7 @@ def labelsJSON2Yolo(labels, queries, ship_pose):
     return result 
 
 def process_sample(src_path_img, labels_path, imu_data, frame_id, target_dir, sample_name, buoyGTData):
-    """Process a single sample and save to target directory"""
+    """Process a single sample and save to target directory (including raw IMU data)"""
     # create query file
     imu_curr = imu_data[frame_id] 
     ship_pose = [imu_curr[3],imu_curr[4],imu_curr[2]]
@@ -83,6 +83,14 @@ def process_sample(src_path_img, labels_path, imu_data, frame_id, target_dir, sa
     with open(labelfile, 'w') as f:
         f.writelines(txtlabels)
     
+    # save raw IMU data for this frame
+    imuFile = os.path.join(target_dir, "imu", sample_name + '.txt')
+    with open(imuFile, 'w') as f:
+        # Write IMU data as space-separated values
+        # Format: timestamp latitude longitude heading ...other IMU fields
+        imu_line = " ".join([str(val) for val in imu_curr]) + "\n"
+        f.write(imu_line)
+    
     return True
 
 # Settings:
@@ -111,6 +119,7 @@ for split in ['train', 'val', 'test']:
     os.makedirs(os.path.join(split_dir, "images"), exist_ok=True)
     os.makedirs(os.path.join(split_dir, "labels"), exist_ok=True)
     os.makedirs(os.path.join(split_dir, "queries"), exist_ok=True)
+    os.makedirs(os.path.join(split_dir, "imu"), exist_ok=True)  # Add IMU directory
 
 buoyGTData = GetGeoData()
 
