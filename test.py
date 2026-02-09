@@ -99,7 +99,7 @@ def print_metrics(metrics):
     metrics["precision"] = metrics["tp"] / (metrics["tp"]+ metrics["fp"]) if (metrics["tp"]+ metrics["fp"]) > 0 else 0
     metrics["recall"] = metrics["tp"] / (metrics["tp"]+ metrics["fn"]) if (metrics["tp"]+ metrics["fn"]) > 0 else 0
     metrics["f1"] = 2 * metrics["precision"] * metrics["recall"] / (metrics["precision"] + metrics["recall"]) if (metrics["precision"]+ metrics["recall"]) > 0 else 0
-    metrics["mean-IoU"] = metrics["IoU"] / metrics["tp_match"] if metrics["tp_match"] > 0 else 0
+    metrics["mean_IoU"] = metrics["IoU"] / metrics["tp_match"] if metrics["tp_match"] > 0 else 0
     for k,v in metrics.items():
         print(f"{k}:".ljust(6), v)
     with open("results.json", "w") as f:
