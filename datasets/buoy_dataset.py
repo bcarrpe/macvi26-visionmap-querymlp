@@ -16,14 +16,14 @@ import warnings
 warnings.filterwarnings("ignore", category=UserWarning)
 
 def collate_fn(batch):
-    img, queries, labels, queries_mask, labels_mask, name = zip(*batch)
+    img, queries, labels, queries_mask, labels_mask, name, imu_data = zip(*batch)
     img = torch.stack(img, dim=0)
     pad_q = pad_sequence(queries, batch_first=True, padding_value = 0.0)
     pad_l = pad_sequence(labels, batch_first=True, padding_value = 0.0)
     pad_mask_q = pad_sequence(queries_mask, batch_first=True, padding_value=False)
     pad_mask_l = pad_sequence(labels_mask, batch_first=True, padding_value=False)
-
-    return img, pad_q, pad_l, pad_mask_q, pad_mask_l, name
+    imu_data = torch.stack(imu_data, dim=0)
+    return img, pad_q, pad_l, pad_mask_q, pad_mask_l, name, imu_data  
     
 
 class BuoyDataset(Dataset):
@@ -55,6 +55,7 @@ class BuoyDataset(Dataset):
         self.labels = sorted(os.listdir(os.path.join(self.data_path, "labels")))
         self.images = sorted(os.listdir(os.path.join(self.data_path, "images")))
         self.queries = sorted(os.listdir(os.path.join(self.data_path, "queries")))
+        self.imus = sorted(os.listdir(os.path.join(self.data_path, "imu")))  # YENİ SATIR
 
         self.checkdataset()
 
@@ -71,8 +72,8 @@ class BuoyDataset(Dataset):
                 raise ValueError(f"YAML file does not contain path to {self.mode} folder")
 
     def checkdataset(self):
-        for label, image, query in zip(self.labels, self.images, self.queries):
-            if not image.split(".")[0] == label.split('.')[0] == query.split('.')[0]:
+        for label, image, query, imu  in zip(self.labels, self.images, self.queries, self.imus):
+            if not image.split(".")[0] == label.split('.')[0] == query.split('.')[0] == imu.split('.')[0]:
                 print(f"Warning, file not matching: {label}, {image}, {query}")
 
     def __len__(self):
@@ -103,6 +104,8 @@ class BuoyDataset(Dataset):
         queries = torch.tensor(np.loadtxt(os.path.join(self.data_path, 'queries', self.queries[index])),
                                dtype=torch.float32)[..., 0:3] # only take the first three datapoints in the label file (id, dist, angle)
 
+        imu_data = torch.tensor(np.loadtxt(os.path.join(self.data_path, 'imu', self.imus[index])), 
+                                dtype=torch.float32)
         # ensure 2D shape:
         if queries.ndim == 1:
             queries = queries.unsqueeze(0)
@@ -134,6 +137,6 @@ class BuoyDataset(Dataset):
 
         name = os.path.join(self.data_path, "images", self.images[index])
 
-        sample = (img, queries, labels_extended, queries_mask, labels_mask, name)
+        sample = (img, queries, labels_extended, queries_mask, labels_mask, name, imu_data)
         return sample
         

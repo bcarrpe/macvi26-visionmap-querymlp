@@ -164,7 +164,7 @@ def test(model, data_loader, device, logger=None):
     metrics_dict_distance = {}
     latency_dict = defaultdict(float)
     with tqdm(data_loader, desc=str(f"Test").ljust(8), ncols=150) as pbar:
-        for images, queries, labels, queries_mask, labels_mask, name in pbar:
+        for images, queries, labels, queries_mask, labels_mask, name,imu in pbar:
             start_time = time.perf_counter()
             images = images.to(device)
             queries = queries.to(device)

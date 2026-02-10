@@ -55,7 +55,7 @@ def train_one_epoch(model, criterion, data_loader, optimizer, device, epoch, max
     loss_giou = []
 
     with tqdm(data_loader, desc=str(f"Train - Epoch {epoch}").ljust(16), ncols=150) as pbar:
-        for images, queries, labels, queries_mask, labels_mask, name in pbar:
+        for images, queries, labels, queries_mask, labels_mask, name,imu in pbar:
             images = images.to(device)
             queries = queries.to(device)
             queries = queries[..., 1:]  # remove index from queries (only for debugging reasons)
@@ -110,7 +110,7 @@ def evaluate(model, criterion, data_loader, device, epoch, logger=None):
     loss_boxL1 = []
     loss_giou = []
     with tqdm(data_loader, desc=str(f"Val - Epoch {epoch}").ljust(16), ncols=150) as pbar:
-        for images, queries, labels, queries_mask, labels_mask, name in pbar:
+        for images, queries, labels, queries_mask, labels_mask, name, imu in pbar:
             images = images.to(device)
             queries = queries.to(device)
             queries = queries[..., 1:]  # remove index from queries (only for debugging reasons)
