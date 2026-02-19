@@ -19,16 +19,16 @@ To get started
    conda activate cvpr2026_macvi_visionmap
    pip install -r requirements.txt
    ```
-3. Download the dataset from https://drive.google.com/drive/folders/1OXSok1Aux0rfygNQHFIe8goB695DeN3f
+3. Download the [dataset](https://drive.google.com/drive/folders/1OXSok1Aux0rfygNQHFIe8goB695DeN3f)
 4. Change the paths in `dataset.yaml` to point to the downloaded dataset
-5. Either download example weights (`best.pth`) from https://drive.google.com/drive/folders/1QSybp1gAVP2HNXc9ye-5T_X-7j1huSZP or train a model yourself (see Training)
+5. Either download [example weights (`best.pth`)](https://drive.google.com/drive/folders/1QSybp1gAVP2HNXc9ye-5T_X-7j1huSZP) or train a model yourself (see Training)
 6. Change `path_to_weights` in `evaluate_example.py` to your model weights. 
 7. Either create `test_results/` directory or change the path in the script.
 8. Run evaluation:
    ```bash
    python evaluate_example.py
    ```
-9. Upload `result.json` to the leaderboard at https://macvi.org/leaderboard/surface/vision-to-chart/vision-to-chart
+9. Upload `result.json` to the [leaderboard](https://macvi.org/leaderboard/surface/vision-to-chart/vision-to-chart)
    
 
 ## Dataset
