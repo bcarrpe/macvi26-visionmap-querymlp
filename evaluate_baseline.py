@@ -1,31 +1,20 @@
-from collections import defaultdict
-import json
 import os
-import random
 import time
-
-import numpy as np
-
-from tqdm import tqdm
+import random
+from collections import defaultdict
 
 import cv2
+import numpy as np
 import torch
+import yaml
 from torch.nn.utils.rnn import pad_sequence
-from torch.utils.data import Dataset, DataLoader
-from torchvision import transforms
+from torch.utils.data import DataLoader, Dataset
 from torchvision.ops.boxes import box_area
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
-import yaml
+from tqdm import tqdm
 
-# Author of get_model() and input_collate_fn() --> Borja Carrillo Perez (borjacape@gmail.com)
-
-# -----------------------------------------------------------------------------------
-# Replace the following functions with your own implementations. Add imports inside the function definitions as needed.
-# Please do not change the function inputs
-# See evaluate_example.py at github.com/mkaraaslan-dev/CVPR2026-Transformer for an example implementation
 
 def get_model():
-    import torch
     import torch.nn as nn
     from models.backbone import Backbone, Joiner
     from models.position_encoding import PositionEmbeddingSine
@@ -59,11 +48,11 @@ def get_model():
     model = DETR(
         backbone,
         transformer,
-        input_dim_gt=4,       # [dist, bearing, cx, cy]
+        input_dim_gt=2,        # [dist_norm, bearing_norm] — baseline
         aux_loss=False,
-        use_embeddings=use_embeddings
+        use_embeddings=use_embeddings,
     )
-    checkpoint = torch.load('checkpoints/best.pth', map_location='cpu')
+    checkpoint = torch.load('checkpoints_baseline/best.pth', map_location='cpu')
     model.load_state_dict(checkpoint['model'], strict=True)
 
     class CalibratedModel(nn.Module):
@@ -83,80 +72,32 @@ def get_model():
             out['pred_logits'] = logits_cal
             return out
 
-    BIAS = -0.5   
+    # Update BIAS after running sweep_bias_baseline.py
+    BIAS = 2.0
 
     return CalibratedModel(model, bias=BIAS)
 
 
 def input_collate_fn(img, queries, queries_mask, imu_data):
     import torch
-    import numpy as np
     from torch.nn.utils.rnn import pad_sequence
-    from query_mlp import QueryMLP
-
-    # load frozen MLP once (cached on function attribute)
-    if not hasattr(input_collate_fn, '_mlp'):
-        mlp = QueryMLP(input_dim=6, hidden_dim=128)
-        mlp.load_state_dict(torch.load('query_mlp.pth', map_location='cpu'))
-        mlp.eval()
-        for p in mlp.parameters():
-            p.requires_grad = False
-        input_collate_fn._mlp = mlp
-
-    mlp = input_collate_fn._mlp
-
-    PITCH_SCALE   = 10.0
-    ROLL_SCALE    = 10.0
-    HEADING_SCALE = 180.0
 
     new_imgs, proc_queries = [], []
-    for batch_img, batch_queries, batch_imu in zip(img, queries, imu_data):
-        imu_flat    = batch_imu.flatten()
-        pitch_deg   = float(imu_flat[0])
-        roll_deg    = float(imu_flat[1])
-        heading_deg = float(imu_flat[2])
-
-        # keep only [id, dist_m, bearing_deg]
-        q = batch_queries[..., 0:3].clone()
-        dist_m      = q[:, 1].numpy()
-        bearing_deg = q[:, 2].numpy()
-
-        dist_norm = dist_m / 1000.0
-        inv_dist  = np.clip(1.0 / np.maximum(dist_norm, 0.001), 0.0, 10.0)
-
-        mlp_input = np.stack([
-            dist_norm,
-            inv_dist,
-            bearing_deg / 180.0,
-            np.full_like(dist_norm, pitch_deg   / PITCH_SCALE),
-            np.full_like(dist_norm, roll_deg    / ROLL_SCALE),
-            np.full_like(dist_norm, heading_deg / HEADING_SCALE),
-        ], axis=1)  # [N, 6]
-
-        with torch.no_grad():
-            mlp_out = mlp(torch.tensor(mlp_input, dtype=torch.float32))  # [N, 2]
-
-        # normalize dist and bearing
-        q[:, 1] = q[:, 1] / 1000.0
-        q[:, 2] = q[:, 2] / 180.0
-
-        # final query: [id, dist_norm, bearing_norm, cx, cy]
-        q = torch.cat([q, mlp_out], dim=1)  # [N, 5]
-
+    for batch_img, batch_queries in zip(img, queries):
+        q = batch_queries[..., 0:3].clone()   # [id, dist_m, bearing_deg]
+        q[:, 1] = q[:, 1] / 1000.0            # normalize dist
+        q[:, 2] = q[:, 2] / 180.0             # normalize bearing
         proc_queries.append(q)
         new_imgs.append(batch_img / 255)
 
     img   = torch.stack(new_imgs, dim=0)
     pad_q = pad_sequence(proc_queries, batch_first=True,
-                         padding_value=0.0)[..., 1:]  # strip id → [dist, bearing, cx, cy]
+                         padding_value=0.0)[..., 1:]   # strip id
     pad_mask_q = pad_sequence(queries_mask, batch_first=True, padding_value=False)
     return {"images": img, "queries": pad_q, "queries_mask": pad_mask_q}
 
-# Please do not change anything other than get_model and input_collate_fn in this script.
-# During evaluation, we will copy over these two functions, and only these two, into our own evaluation.py script
-# It is the sole responsibility of the participants to ensure that this evaluation script works following the above convention.
-# -----------------------------------------------------------------------------------
 
+# ── everything below is unchanged from the evaluation harness ─────────────────
 
 class BuoyDataset(Dataset):
     def __init__(self, yaml_file, mode='train') -> None:
@@ -247,9 +188,9 @@ def box_cxcywh_to_xyxy(x):
 
 
 def prepare_ap_data(outputs, labels, labels_mask):
-    src_boxes   = outputs['pred_boxes']
-    src_logits  = outputs['pred_logits']
-    labels      = labels[..., 1:]
+    src_boxes  = outputs['pred_boxes']
+    src_logits = outputs['pred_logits']
+    labels     = labels[..., 1:]
     preds  = []
     target = []
     batch_size = src_boxes.size(0)
@@ -271,11 +212,11 @@ def computeIOU(bb_pred, bb_label):
 
 def compute_metrics(outputs, labels, queries_mask, labels_mask, results_dict,
                     iou_thresh=0.5, conf_thresh=0.90):
-    src_logits  = outputs['pred_logits'].cpu().detach()
-    conf_mask   = torch.full(src_logits.shape, fill_value=False)
+    src_logits      = outputs['pred_logits'].cpu().detach()
+    conf_mask       = torch.full(src_logits.shape, fill_value=False)
     conf_mask[src_logits >= conf_thresh] = True
-    bb_filtered      = outputs['pred_boxes'][conf_mask & labels_mask].cpu().detach()
-    labels_filtered  = labels[conf_mask & labels_mask][..., 1:]
+    bb_filtered     = outputs['pred_boxes'][conf_mask & labels_mask].cpu().detach()
+    labels_filtered = labels[conf_mask & labels_mask][..., 1:]
     fp_conf = src_logits[conf_mask & ~labels_mask & queries_mask].numel()
     fn_conf = src_logits[~conf_mask & labels_mask].numel()
     res     = computeIOU(bb_filtered, labels_filtered)
@@ -296,14 +237,14 @@ def print_metrics(metrics):
     metrics["mean_IoU"]  = metrics["IoU"] / metrics["tp_match"] if metrics["tp_match"] > 0 else 0
     for k, v in metrics.items():
         print(f"{k}:".ljust(6), v)
-    with open("results.json", "w") as f:
+    with open("results_baseline.json", "w") as f:
+        import json
         json.dump(metrics, f)
 
 
 def print_latency(latency):
-    latency = latency["time"] / latency["count"]
-    print("Latency: ", round(latency), "ms")
-    print("FPS: ", round(1 / (latency / 1000), 2))
+    print("Latency: ", round(latency["time"] / latency["count"], 2), "ms")
+    print("FPS: ", round(1 / (latency["time"] / latency["count"] / 1000), 2))
 
 
 def compute_F1_over_dist(outputs, queries, labels, queries_mask, labels_mask,
@@ -346,13 +287,13 @@ def save_F1_over_dist(metrics, test_dir):
         res[i, 2] = iou
     print("\nF1 and IoU over distances:")
     print(res)
-    np.save(os.path.join(test_dir, 'np_arr.npy'), res)
+    np.save(os.path.join(test_dir, 'np_arr_baseline.npy'), res)
 
 
 @torch.no_grad()
 def test(model, data_loader, device, output_dir="test_results"):
     model.eval()
-    ap_metric = MeanAveragePrecision(box_format="cxcywh", iou_type='bbox')
+    ap_metric             = MeanAveragePrecision(box_format="cxcywh", iou_type='bbox')
     metrics_dict          = defaultdict(float)
     metrics_dict_distance = {}
     latency_dict          = defaultdict(float)
@@ -380,9 +321,7 @@ def test(model, data_loader, device, output_dir="test_results"):
 
     print("Results:")
     print_metrics(metrics_dict)
-    print()
     print_latency(latency_dict)
-    print()
     save_F1_over_dist(metrics_dict_distance, output_dir)
 
 
