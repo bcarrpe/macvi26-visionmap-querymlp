@@ -3,7 +3,7 @@
 This repository extends the [MaCVi @ CVPR 2026 Vision-to-Chart baseline](https://github.com/mkaraaslan-dev/CVPR2026-Transformer) with a learned world-to-image projection (QueryMLP) that achieves **Overall = 0.7386** (F1 = 0.8055, mIoU = 0.6718) on the held-out test set, placing **2nd** on the challenge leaderboard.
 
 > **Submitted report:** *Improved Vision-to-Chart Buoy Association with Learned World-to-Image Projection* — [arXiv link TBD]  
-> **Author:** Borja Carrillo-Perez (https://scholar.google.es/citations?user=kF6e-FMAAAAJ&hl=es)
+> **Author:** Borja Carrillo-Perez (https://scholar.google.es/citations?user=kF6e-FMAAAAJ&hl=es)  
 > **Challenge:** https://macvi.org/workshop/cvpr/challenges/vision_map  
 > **Challenge results paper:** https://arxiv.org/abs/2604.13244
 
