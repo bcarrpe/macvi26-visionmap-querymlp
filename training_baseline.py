@@ -9,7 +9,7 @@ import torch
 from tqdm import tqdm
 from torch.utils.data import DataLoader
 
-from datasets.buoy_dataset import BuoyDataset, collate_fn
+from datasets.buoy_dataset_baseline import BuoyDataset, collate_fn
 from models.detr import DETR, SetCriterion
 from models.transformer import Transformer
 from models.backbone import Backbone, Joiner
@@ -86,10 +86,10 @@ def train_one_epoch(model, criterion, data_loader, optimizer, device,
                                  for k in loss_dict if 'loss_giou' in k).item())
 
             pbar.set_postfix({
-                "Loss":      f"{sum(loss_total)/len(loss_total):.3f}",
-                "Obj":       f"{sum(loss_obj)/len(loss_obj):.3f}",
-                "BoxL1":     f"{sum(loss_boxL1)/len(loss_boxL1):.3f}",
-                "GIoU":      f"{sum(loss_giou)/len(loss_giou):.3f}",
+                "Loss":  f"{sum(loss_total)/len(loss_total):.3f}",
+                "Obj":   f"{sum(loss_obj)/len(loss_obj):.3f}",
+                "BoxL1": f"{sum(loss_boxL1)/len(loss_boxL1):.3f}",
+                "GIoU":  f"{sum(loss_giou)/len(loss_giou):.3f}",
             })
 
             if not math.isfinite(losses.item()):
@@ -176,9 +176,9 @@ def evaluate(model, criterion, data_loader, device, epoch, logger=None):
 # ── settings ───────────────────────────────────────────────────────────────────
 
 # General
-transfer_learning = True        # init from COCO-pretrained DETR-R50
-path_to_weights   = "detr-r50-e632da11.pth"   # download from DETR repo
-output_dir        = "checkpoints"
+transfer_learning = True
+path_to_weights   = "detr-r50-e632da11.pth"
+output_dir        = "checkpoints_baseline"
 start_epoch       = 0
 
 # Backbone
@@ -192,7 +192,7 @@ dim_feedforward = 2048
 dropout         = 0.1
 nheads          = 8
 pre_norm        = True
-input_dim_gt    = 4    # [dist_norm, bearing_norm, cx, cy] — QueryMLP extended
+input_dim_gt    = 2    # [dist_norm, bearing_norm] — baseline, no QueryMLP
 use_embeddings  = False
 
 # Loss
@@ -205,7 +205,7 @@ giou_loss_coef = 7
 lr             = 1e-4
 weight_decay   = 1e-3
 epochs         = 183
-lr_drop        = 135   # StepLR drop epoch (best checkpoint found at epoch 182)
+lr_drop        = 135
 clip_max_norm  = 0.1
 
 # DataLoader
@@ -213,8 +213,7 @@ batch_size  = 16
 num_workers = 0
 
 # Device
-device      = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-distributed = False
+device          = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 path_to_dataset = "dataset.yaml"
 
 # ── build model ────────────────────────────────────────────────────────────────
@@ -276,7 +275,6 @@ data_loader_val   = DataLoader(dataset_val, batch_size,
 if transfer_learning:
     print(f"Loading pretrained weights from {path_to_weights} ...")
     checkpoint = torch.load(path_to_weights, map_location='cpu')
-    # class_embed has 92 COCO classes — remove before loading
     del checkpoint['model']['class_embed.weight']
     del checkpoint['model']['class_embed.bias']
     missing, unexpected = model_without_ddp.load_state_dict(

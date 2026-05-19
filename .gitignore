@@ -1,25 +1,31 @@
-.nfs*
-*.ipynb
+# Model weights (too large for git — distribute separately)
+detr-r50-e632da11.pth
+submission/
+checkpoints*/
+
+# Training artefacts
+training_results/
+train-*/
+test_results/
+results.json
+query_mlp_val.txt
+figure2/
+training_log*.txt
+# Python
+__pycache__/
 *.pyc
-.dumbo.json
-.DS_Store
-.*.swp
-*.pth
-**/__pycache__/**
+*.pyo
+.eggs/
+*.egg-info/
+dist/
+build/
+
+# Jupyter
 .ipynb_checkpoints/
-datasets/data/
-experiment-*
-*.tmp
-*.pdf
-*.pkl
-*log_loss.txt
-*log_stats.txt
-*log.txt
-**/.mypy_cache/*
-.mypy_cache/*
-not_tracked_dir/
-.vscode
-*description.txt
-*training_results/
-*detections.txt
-*test_results/
+
+# VS Code
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db

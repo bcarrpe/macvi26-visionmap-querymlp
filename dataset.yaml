@@ -1,4 +1,3 @@
-train: D:/1. My folder/LESSON/LOOKOUT/aton-dataset/train
-val: D:/1. My folder/LESSON/LOOKOUT/aton-dataset/val
-
-test: D:/1. My folder/LESSON/LOOKOUT/aton-dataset/test
+train: /dataset/aton-dataset/train
+val: /dataset/aton-dataset/val
+test: /dataset/aton-dataset/test

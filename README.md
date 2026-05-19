@@ -1,80 +1,177 @@
-V2W-Transformer
-========
-This repo contains the modified architecture of DETR based Object Detection Models. It Replaces the fixed amount of object queries with a varying amount of sampled nearby chart markers. The spatial position of the chart markers w.r.t. the camera is encoded with an MLP and passed as an embedding to the decoder. After the final decoder layer, each chart marker embedding predicts its visibility for the given frame as well as bounding box coordinates.
+# Vision-to-Chart Buoy Association with Learned World-to-Image Projection — 2nd Place Solution
 
-![transformer_architecture](https://github.com/user-attachments/assets/8ffa77b7-5a87-48d3-849e-db56a00b888e)
+This repository extends the [MaCVi @ CVPR 2026 Vision-to-Chart baseline](https://github.com/mkaraaslan-dev/CVPR2026-Transformer) with a learned world-to-image projection (QueryMLP) that achieves **Overall = 0.7386** (F1 = 0.8055, mIoU = 0.6718) on the held-out test set, placing **2nd** on the challenge leaderboard.
 
-## Challenges participation
-Be sure to read the challenges details at https://macvi.org/workshop/cvpr/challenges/vision_map
+> **Paper:** *Improved Vision-to-Chart Buoy Association with Learned World-to-Image Projection* — [arXiv link TBD]  
+> **Challenge:** https://macvi.org/workshop/cvpr/challenges/vision_map  
+> **Author:** Borja Carrillo-Perez (Arquimea Research Center)
 
-To get started
-1. Clone this repository
-   ```bash
-   git clone https://github.com/mkaraaslan-dev/CVPR2026-Transformer
-   cd CVPR2026-Transformer
-   ```
-2. Configure a working conda enviroment
-   ```bash
-   conda create -y -n cvpr2026_macvi_visionmap python=3.11
-   conda activate cvpr2026_macvi_visionmap
-   pip install -r requirements.txt
-   ```
-3. Download the [dataset](https://drive.google.com/drive/folders/1OXSok1Aux0rfygNQHFIe8goB695DeN3f)
-4. Change the paths in `dataset.yaml` to point to the downloaded dataset
-5. Either download [example weights (`best.pth`)](https://drive.google.com/drive/folders/1QSybp1gAVP2HNXc9ye-5T_X-7j1huSZP) or train a model yourself (see Training)
-6. Change `path_to_weights` in `evaluate_example.py` to your model weights. 
-7. Either create `test_results/` directory or change the path in the script.
-8. Run evaluation:
-   ```bash
-   python evaluate_example.py
-   ```
-9. Upload `result.json` to the [leaderboard](https://macvi.org/leaderboard/surface/vision-to-chart/vision-to-chart)
-   
+---
 
-## Dataset
-The dataset has to be provided in the following format:
+## Method overview
+
+The baseline DETR decoder receives per-buoy queries encoding only world-space distance and bearing, forcing the transformer to learn the full geometric projection implicitly. This solution adds a small frozen MLP (**QueryMLP**) trained to explicitly predict the buoy's waterline contact point in the image from chart measurements and IMU orientation. The predicted pixel coordinates are appended to each query vector, giving the decoder a direct spatial prior and reducing what it must learn from scratch.
+
+![Architecture diagram](assets/diagram.png)
+
+At inference a logit bias of **−0.5** is applied before thresholding (calibrated on the validation set via `sweep_bias_mlp.py`).
+
+---
+
+## Results
+
+| Model (split) | P | R | F1 | mIoU | Overall |
+|---|---|---|---|---|---|
+| Baseline (val) | 0.7970 | 0.7912 | 0.7941 | 0.6445 | 0.7193 |
+| Ours (val) | 0.8627 | 0.7761 | 0.8171 | 0.6753 | **0.7462** |
+| Ours (test, leaderboard 2nd place) | 0.8563 | 0.7604 | 0.8055 | 0.6718 | **0.7386** |
+
+The baseline is trained under identical conditions (same COCO init, hyperparameters, augmentations, epochs) but uses only the original 2D query (distance + bearing), without IMU input or pixel coordinate prediction.
+
+![Qualitative comparison](assets/comparison_00079.png)
+
+---
+
+## Repository structure
+
 ```
-|
-├── train
-│   ├── images
-│   |   ├── 00001.png
-│   |   └── 00002.png
-│   ├── labels
-│   |   ├── 00001.txt
-│   |   └── 00002.txt
-│   └── queries
-│   |   ├── 00001.txt
-│   |   └── 00002.txt
-│   └── imu
-│       ├── 00001.txt
-│       └── 00002.txt
-├── test
-├── val
-└── dataset.yaml
+macvi26-visionmap-querymlp/
+├── query_mlp.py                  ← QueryMLP architecture
+├── query_mlp.pth                 ← frozen QueryMLP weights (committed)
+├── train_query_mlp.py            ← Step 1: train the frozen MLP
+├── training.py                   ← Step 2: fine-tune DETR with 4D queries
+├── sweep_bias_mlp.py             ← Step 3: find optimal logit bias on val set
+├── evaluate.py                   ← Step 4: run evaluation (submit this)
+├── training_baseline.py          ← train the 2D-query baseline for comparison
+├── sweep_bias_baseline.py        ← find optimal logit bias for baseline
+├── evaluate_baseline.py          ← evaluate the baseline model
+├── assets/
+│   ├── diagram.png               ← architecture diagram
+│   └── comparison_00079.png      ← qualitative comparison figure
+├── datasets/
+│   ├── buoy_dataset.py           ← modified: integrates frozen QueryMLP
+│   └── buoy_dataset_baseline.py  ← original dataset (no QueryMLP)
+├── models/                       ← unchanged from baseline
+├── util/                         ← unchanged from baseline
+├── dataset.yaml                  ← set your dataset paths here
+└── Dockerfile                    ← reproducible evaluation environment
 ```
-The dataset.yaml contains the paths to the train test and val folders. Each folder consists of an image, label and query subfolder, where the ids of the individual samples can be used as cross reference to the other folders. 
 
-A labels.txt file contains the bounding box annotations in YOLO format alongside the corresponding query id (first position). A query.txt file contains all sampled chart markers (queries) for the given frame, containing dist, bearing, lat, lng as well as its id.
+**Pre-trained weights:**
+- `query_mlp.pth` — frozen QueryMLP weights (148 KB, committed to this repo)
+- `checkpoints/best.pth` — fine-tuned DETR weights (475 MB) — download from [GitHub Releases](https://github.com/bcarrpe/macvi26-visionmap-querymlp/releases/tag/v1.0)
+- `detr-r50-e632da11.pth` — COCO-pretrained DETR-R50 init weights ([download](https://dl.fbaipublicfiles.com/detr/detr-r50-e632da11.pth))
 
+---
 
-## Training
-To train the model, run:
+## Quickstart (Docker)
+
+### 1. Download weights
+
+```bash
+# DETR weights (place in repo root)
+wget https://dl.fbaipublicfiles.com/detr/detr-r50-e632da11.pth
+
+# Submission weights (place in checkpoints/)
+mkdir -p checkpoints
+# Download checkpoints/best.pth from GitHub Releases (see link above)
+```
+
+`query_mlp.pth` is already in the repo — no download needed.
+
+### 2. Build the image
+
+```bash
+docker build -t buoy-eval .
+```
+
+### 3. Run evaluation
+
+```bash
+docker run --gpus all \
+    -v $(pwd):/workspace \
+    -v /path/to/aton-dataset:/dataset \
+    -it buoy-eval bash -c "cd /workspace && mkdir -p test_results && python evaluate.py"
+```
+
+Replace `/path/to/aton-dataset` with the local path to the ATON dataset (request access via the [challenge page](https://macvi.org/workshop/cvpr/challenges/vision_map))
+
+Results are printed to stdout and saved to `results.json` and `test_results/np_arr.npy`.
+
+---
+
+## Full training pipeline
+
+All steps below assume you are inside the Docker container (`cd /workspace`).
+
+### Step 1 — Train QueryMLP
+
+```bash
+python train_query_mlp.py
+```
+
+Outputs `query_mlp.pth`. Trains up to 1000 epochs with early stopping (patience = 60); converges around epoch 585. Expected validation pixel error: median ≈ 18 px.
+
+### Step 2 — Download COCO-pretrained DETR-R50 weights
+
+```bash
+wget https://dl.fbaipublicfiles.com/detr/detr-r50-e632da11.pth
+```
+
+### Step 3 — Fine-tune DETR
+
 ```bash
 python training.py
 ```
-Hyperparameters as well as paths to weights and Datasets can be set under the SETTINGS section in the script.
-The script also support multi GPU training (however not distributed on different compute nodes). This can be enabled by setting distributed to True.
 
+Fine-tunes up to 200 epochs (StepLR drop at epoch 135). Best checkpoint saved to `checkpoints/best.pth` (expected around epoch 182).
 
-## Testing
-To test the model on labeled data run:
+### Step 4 — Calibrate logit bias
+
 ```bash
-python test.py
+python sweep_bias_mlp.py
 ```
 
-## Inference on Video
-To run inference on a video to compute the associations between chart markers and detected objects, run:
+Sweeps bias values over [−3, 3] on the validation set. Expected optimal bias: **−0.5**.
+
+### Step 5 — Evaluate
+
 ```bash
-python buoyAssociation.py
+mkdir -p test_results
+python evaluate.py
 ```
-Specify the Path to the Video and IMU File in the Function call (at the bottom of the script)
+
+---
+
+## Requirements
+
+- Docker with NVIDIA GPU support (`nvidia-container-toolkit`)
+- NVIDIA GPU, CUDA 12.1+, ≥ 8 GB VRAM
+- Dataset: ATON dataset (request access via the [challenge page](https://macvi.org/workshop/cvpr/challenges/vision_map))
+
+---
+
+## Citation
+
+If you use this work please cite:
+
+```bibtex
+@article{carrilloperez2025v2c,
+  author  = {Carrillo-Perez, Borja},
+  title   = {Improved Vision-to-Chart Buoy Association with Learned World-to-Image Projection},
+  year    = {2025},
+  note    = {arXiv link TBD}
+}
+```
+
+And the challenge baseline:
+
+```bibtex
+@misc{kreis2025realtime,
+  author       = {Kreis, M. and Kiefer, B.},
+  title        = {Real-Time Fusion of Visual and Chart Data for Enhanced Maritime Vision},
+  year         = {2025},
+  eprint       = {2507.13880},
+  archivePrefix= {arXiv}
+}
+```
