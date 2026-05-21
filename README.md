@@ -1,10 +1,11 @@
 # Vision-to-Chart Buoy Association with Learned World-to-Image Projection 
 This repository extends the [MaCVi @ CVPR 2026 Vision-to-Chart baseline](https://github.com/mkaraaslan-dev/CVPR2026-Transformer) with a learned world-to-image projection (QueryMLP) that achieves **Overall = 0.7386** (F1 = 0.8055, mIoU = 0.6718) on the held-out test set.
 
-> **Submitted report:** *Improved Vision-to-Chart Buoy Association with Learned World-to-Image Projection* — [arXiv link TBD]  
-> **Author:** Borja Carrillo-Perez (https://scholar.google.es/citations?user=kF6e-FMAAAAJ&hl=es)  
-> **Challenge:** https://macvi.org/workshop/cvpr/challenges/vision_map  
-> **Challenge results paper:** https://arxiv.org/abs/2604.13244
+> **Technical report:** *Improved Vision-to-Chart Buoy Association with Learned World-to-Image Projection* — arXiv link pending  
+> **Author:** Borja Carrillo-Perez  
+> **Challenge:** MaCVi @ CVPR 2026 Vision-to-Chart Data Association Challenge  
+> **Challenge overview / results paper:** https://arxiv.org/abs/2604.13244  
+> **Baseline architecture:** Kreis and Kiefer, *Real-Time Fusion of Visual and Chart Data for Enhanced Maritime Vision*, arXiv:2507.13880
 
 ---
 
@@ -16,17 +17,30 @@ The baseline DETR decoder receives per-buoy queries encoding only world-space di
 
 At inference a logit bias of **−0.5** is applied before thresholding (calibrated on the validation set via `sweep_bias_mlp.py`).
 
+### Main changes from the MaCVi baseline
+
+This repository is a fork of the MaCVi Vision-to-Chart Transformer baseline. The main modifications are:
+
+- `query_mlp.py`: defines the frozen QueryMLP that predicts normalized waterline contact points.
+- `train_query_mlp.py`: trains QueryMLP from chart, IMU, and annotation correspondences.
+- `datasets/buoy_dataset.py`: augments each chart query with QueryMLP-predicted pixel coordinates.
+- `training.py`: fine-tunes DETR with 4D queries `[distance, bearing, cx, cy]`.
+- `sweep_bias_mlp.py`: calibrates the inference logit bias on the validation split.
+- `evaluate.py`: submitted evaluation entry point using the frozen QueryMLP and final DETR checkpoint.
+
+The original 2D-query baseline path is preserved in `training_baseline.py`, `sweep_bias_baseline.py`, `evaluate_baseline.py`, and `datasets/buoy_dataset_baseline.py`.
+
 ---
 
 ## Results
 
 | Model (split) | P | R | F1 | mIoU | Overall |
 |---|---|---|---|---|---|
-| Baseline (val) | 0.7970 | 0.7912 | 0.7941 | 0.6445 | 0.7193 |
+| Re-trained baseline (val) | 0.7970 | 0.7912 | 0.7941 | 0.6445 | 0.7193 |
 | Ours (val) | 0.8627 | 0.7761 | 0.8171 | 0.6753 | **0.7462** |
 | Ours (test, leaderboard 2nd place) | 0.8563 | 0.7604 | 0.8055 | 0.6718 | **0.7386** |
 
-The baseline is trained under identical conditions (same COCO init, hyperparameters, augmentations, epochs) but uses only the original 2D query (distance + bearing), without IMU input or pixel coordinate prediction.
+The re-trained baseline uses the architecture of Kreis and Kiefer but is trained under the same local conditions as our model: same COCO initialization, hyperparameters, augmentations, and number of epochs. It uses only the original 2D query, distance + bearing, without IMU input or QueryMLP pixel-coordinate prediction.
 
 ![Qualitative comparison](assets/comparison_00079.png)
 
@@ -57,27 +71,25 @@ macvi26-visionmap-querymlp/
 └── Dockerfile                    ← reproducible evaluation environment
 ```
 
-**Pre-trained weights:**
-- `query_mlp.pth` — frozen QueryMLP weights (148 KB, committed to this repo)
-- `checkpoints/best.pth` — fine-tuned DETR weights (475 MB) — download from [GitHub Releases](https://github.com/bcarrpe/macvi26-visionmap-querymlp/releases/tag/v1.0)
-- `detr-r50-e632da11.pth` — COCO-pretrained DETR-R50 init weights ([download](https://dl.fbaipublicfiles.com/detr/detr-r50-e632da11.pth))
+**Pre-trained / released weights:**
+
+- `query_mlp.pth` — frozen QueryMLP weights, committed to this repository and also included in release `v1.0`.
+- `checkpoints/best.pth` — final fine-tuned QueryMLP+DETR-R50 checkpoint, available from GitHub release `v1.0`; required for evaluation.
+- `detr-r50-e632da11.pth` — COCO-pretrained DETR-R50 initialization; required only for re-training, not for evaluating the released checkpoint.
 
 ---
 
 ## Quickstart (Docker)
 
-### 1. Download weights
+### 1. Download the submitted DETR checkpoint
 
 ```bash
-# DETR weights (place in repo root)
-wget https://dl.fbaipublicfiles.com/detr/detr-r50-e632da11.pth
-
-# Submission weights (place in checkpoints/)
 mkdir -p checkpoints
-# Download checkpoints/best.pth from GitHub Releases (see link above)
-```
+curl -L -o checkpoints/best.pth \
+  https://github.com/bcarrpe/macvi26-visionmap-querymlp/releases/download/v1.0/best.pth
 
-`query_mlp.pth` is already in the repo — no download needed.
+`query_mlp.pth` is already in the repo — no download needed
+```
 
 ### 2. Build the image
 
@@ -87,11 +99,35 @@ docker build -t buoy-eval .
 
 ### 3. Run evaluation
 
+By default, `evaluate.py` runs on the public validation split specified in `dataset.yaml`.  
+The private test result in the table was obtained from the challenge organizers' held-out evaluation server using the submitted `get_model()` and `input_collate_fn()` implementation.
+
 ```bash
 docker run --gpus all \
     -v $(pwd):/workspace \
-    -v /path/to/aton-dataset:/dataset \
+    -v /path/to/dataset-parent:/dataset \
     -it buoy-eval bash -c "cd /workspace && mkdir -p test_results && python evaluate.py"
+```
+
+The default `dataset.yaml` assumes the following layout inside the container:
+
+```text
+/dataset/aton-dataset/
+├── train/
+│   ├── images/
+│   ├── labels/
+│   ├── queries/
+│   └── imu/
+├── val/
+│   ├── images/
+│   ├── labels/
+│   ├── queries/
+│   └── imu/
+└── test/
+    ├── images/
+    ├── labels/
+    ├── queries/
+    └── imu/
 ```
 
 Replace `/path/to/aton-dataset` with the local path to the ATON dataset (request access via the [challenge page](https://macvi.org/workshop/cvpr/challenges/vision_map))
@@ -159,7 +195,8 @@ If you use this work please cite:
 @article{carrilloperez2025v2c,
   author  = {Carrillo-Perez, Borja},
   title   = {Improved Vision-to-Chart Buoy Association with Learned World-to-Image Projection},
-  year    = {2025},
+  year    = {2026},
+  note   = {Technical report},
   note    = {arXiv link TBD}
 }
 ```
