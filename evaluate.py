@@ -17,7 +17,7 @@ from torchvision.ops.boxes import box_area
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
 import yaml
 
-# Author of get_model() and input_collate_fn() --> Borja Carrillo Perez (borjacape@gmail.com)
+# Author of get_model() and input_collate_fn() --> Borja Carrillo Perez 
 
 # -----------------------------------------------------------------------------------
 # Replace the following functions with your own implementations. Add imports inside the function definitions as needed.
